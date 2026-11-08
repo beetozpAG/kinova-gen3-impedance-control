@@ -76,12 +76,26 @@ aproximadamente **1 kHz**.
 - Interfaz gráfica (opcional): `python3-pyqt5`, `python3-pyqt5.qtsvg`, `python3-vtk9` y
   `pyqtgraph`.
 
+## Obtener el código
+
+```bash
+git clone https://github.com/beetozpAG/kinova-gen3-impedance-control.git
+cd kinova-gen3-impedance-control
+```
+
+También puede descargarse como ZIP desde el botón **Code → Download ZIP** de GitHub.
+
 ## Compilación
+
+Desde la carpeta del repositorio:
 
 ```bash
 cmake -S . -B build
 cmake --build build -j8
 ```
+
+Los ejecutables quedan en `build/`: `impedance_gen3` (el controlador), las pruebas y las
+herramientas.
 
 ## Pruebas sin robot
 
