@@ -61,8 +61,10 @@ aproximadamente **1 kHz**.
 | `tools/` | Utilidades: `task_info`, `gripper_test`, `fixture_test`, análisis de CSV. |
 | `gui/` | Interfaz gráfica y servidor para el celular (`gui/movil`). |
 | `matlab/` | Simulaciones en MATLAB y Simulink. |
-| `vision_server/` | Servidor de visión (`screw_server`). |
-| `firmware/fixture_esp32/` | Firmware del *fixture* (control de posición adaptable en cascada). |
+| `vision_lib/` | Biblioteca de visión: calibración de la cámara, nube de puntos, segmentación por color, GPD y selección del agarre (incluye GPD en `vision_lib/third_party/gpd`). |
+| `vision_server/` | Servidor de visión (`screw_server`) que atiende al controlador; también detecta el hoyo. |
+| `fixture/firmware/` | Firmware del ESP32 del *fixture*: identificación, PI de corriente y control adaptable (`control_adaptable.ino`, el que usa la tarea). |
+| `fixture/matlab/` | Scripts de adquisición, identificación, sintonía y análisis de los ensayos del *fixture*. |
 
 ## Requisitos
 
@@ -147,17 +149,31 @@ Después de cualquier cambio: recompilar y correr `task_info` y `task_sequence_t
 
 ## Módulo de visión
 
-`vision_server/` contiene el servidor que atiende al controlador (`screw_server`). Se
-compila sobre la biblioteca de visión del equipo (GPD, PCL y OpenCV), que **no** está
-incluida en este repositorio; vea los comentarios de `vision_server/CMakeLists.txt`. El
-controlador funciona sin él para tareas con poses fijas.
+`vision_lib/` contiene la biblioteca de visión (C++ con PCL, OpenCV y GPD) y
+`vision_server/` el servidor que atiende al controlador. Requiere además
+`libpcl-dev`, `libopencv-dev`, `libjsoncpp-dev` y `libx11-dev`. El servidor se compila
+dentro de `vision_lib/`, porque las rutas de sus archivos `cfg/` empiezan en `../`:
 
-## Firmware del *fixture*
+```bash
+cmake -S vision_server -B vision_lib/build_modular -DKG_DIR=$PWD/vision_lib \
+      -DKORTEX_DIR=$PWD/build/_deps/kortex_api_rel-src
+cmake --build vision_lib/build_modular -j8
+cd vision_lib/build_modular && ./screw_server ../cfg/gpd_params.cfg
+```
 
-`firmware/fixture_esp32/` contiene el programa del ESP32 (motor de CD de 12 V con
-encoder, puente H L298N y sensor INA226): control de posición adaptable a 1 kHz, lazo de
-corriente PI a 4 kHz y compensación de fricción seca. Se comunica por USB serie a
-115 200 bauds con comandos de texto (`ZERO`, `START`, `POS <grados>`, `STOP`, `STATUS`).
+Los colores de las piezas (rangos HSV) están en `vision_lib/cfg/plate_colors.cfg` y se
+leen sin recompilar. El controlador solo se conecta al servidor si la tarea tiene pasos
+de visión.
+
+## *Fixture*
+
+`fixture/firmware/control_adaptable.ino` es el firmware del ESP32 (motor de CD de 12 V
+con encoder, puente H L298N y sensor INA226): lazo de corriente PI a 4 kHz con
+linealización por mapa estático (`mapa_corriente.h`) y lazo de posición PD adaptable a
+1 kHz con zona muerta. Se comunica por USB serie a 921 600 bauds con comandos de texto
+(`ZERO`, `START`, `POS <grados>`, `STOP`, `STATUS`). Los otros dos firmwares y los
+scripts de `fixture/matlab/` sirven para identificar la planta y sintonizar el PI con
+otro motor.
 
 ## Simulación
 
@@ -183,5 +199,6 @@ La ley de control toma como referencia la implementación de M. Mayr y J. M. Sal
 
 Código bajo licencia [MIT](LICENSE). Los componentes de terceros conservan su propia
 licencia: el modelo URDF del Gen3 (Kinova, BSD-3, `matlab/URDFFiles`), `low_latency_list`
-(MIT, `DataLogging/low_latency_list`) y las fuentes IBM Plex (SIL OFL 1.1, `gui/fonts`).
+(MIT, `DataLogging/low_latency_list`), GPD (BSD-2, `vision_lib/third_party/gpd`) y las
+fuentes IBM Plex (SIL OFL 1.1, `gui/fonts`).
 La API Kortex y Boost se descargan durante la compilación bajo sus propias licencias.
