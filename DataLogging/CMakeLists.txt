@@ -1,0 +1,22 @@
+project(DataLogging CXX)
+
+cmake_minimum_required(VERSION 3.15)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+if(NOT DEFINED BUILD_TESTS)
+	if (CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
+		set(BUILD_TESTS TRUE)
+	endif()
+endif()
+if(BUILD_TESTS)
+	enable_testing()
+	add_executable(DataLoggingTest main.cpp)
+	target_include_directories(DataLoggingTest PRIVATE utils)
+	target_link_libraries(DataLoggingTest PUBLIC low_latency_list)
+endif()
+add_subdirectory(low_latency_list)
+
+add_library(data_logging INTERFACE)
+target_include_directories(data_logging INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_link_libraries(data_logging INTERFACE low_latency_list)

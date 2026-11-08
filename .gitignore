@@ -1,0 +1,32 @@
+# Compilacion
+build/
+build_*/
+*.o
+*.a
+
+# Datos de corridas y resultados
+*.csv
+*.csv.xz
+*.npy
+*.mat
+matlab/results/
+matlab/simulink/results/
+
+# MATLAB / Simulink
+slprj/
+*.slxc
+*.asv
+
+# Python
+__pycache__/
+*.pyc
+gui/.venv/
+gui/logs/
+
+# Editores y herramientas
+.cache/
+.vscode/
+.idea/
+*.swp
+*.bak*
+*.orig

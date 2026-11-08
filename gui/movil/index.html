@@ -1,0 +1,484 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>MODULAR · Kinova Gen3</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#eef2f5">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<style>
+@font-face { font-family: "IBM Plex Sans"; font-weight: 400; src: url(/fonts/IBMPlexSans-Regular.ttf); }
+@font-face { font-family: "IBM Plex Sans"; font-weight: 500; src: url(/fonts/IBMPlexSans-Medium.ttf); }
+@font-face { font-family: "IBM Plex Sans"; font-weight: 600; src: url(/fonts/IBMPlexSans-SemiBold.ttf); }
+@font-face { font-family: "IBM Plex Mono"; font-weight: 500; src: url(/fonts/IBMPlexMono-Medium.ttf); }
+
+/* Los mismos colores de la GUI (modular_gui/theme.py) */
+:root {
+  --frame: #eef2f5; --sheet: #ffffff; --raised: #f4f6f8; --active: #e3e8ec;
+  --border: #e3e7ea; --control: #878e95;
+  --text: #131416; --muted: #5d6166; --accent: #1b6c80; --selection: #cfe3e8;
+  --primary: #1d1f20; --on-primary: #ffffff;
+  --positive: #1e7b4f; --negative: #c4242a; --negative-soft: #fff5f4; --warning: #92400e; --neutral: #7d838a;
+  --holder: #26292c;
+  --ease: cubic-bezier(.16, 1, .3, 1);
+}
+* { box-sizing: border-box; margin: 0; }
+::selection { background: var(--selection); }
+html, body { height: 100%; }
+body {
+  background: var(--frame); color: var(--text);
+  font: 400 15px/1.35 "IBM Plex Sans", system-ui, sans-serif;
+  -webkit-text-size-adjust: 100%; overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+button { font: inherit; color: inherit; touch-action: manipulation; }
+button:focus-visible, input:focus-visible { outline: 2.5px solid var(--accent); outline-offset: 2px; }
+[hidden] { display: none !important; }
+
+/* ---- Entrada con PIN ---- */
+#entrada {
+  height: 100dvh; display: grid; grid-template-columns: 1fr minmax(0, 340px); gap: 32px; align-items: center;
+  padding: 16px max(32px, env(safe-area-inset-right)) 16px max(32px, env(safe-area-inset-left));
+}
+#entrada h1 { font-size: 21px; font-weight: 600; }
+#entrada .aviso { color: var(--muted); margin-top: 8px; max-width: 42ch; }
+#entrada form { display: grid; gap: 8px; }
+#entrada label { font-weight: 500; }
+#pin {
+  width: 100%; height: 52px; padding: 0 14px; border: 1px solid var(--control); border-radius: 6px;
+  background: var(--sheet); color: var(--text); font: 500 24px "IBM Plex Mono", monospace; letter-spacing: .25em;
+}
+#pin-error { min-height: 20px; color: var(--negative); font-weight: 500; }
+.primario {
+  height: 52px; border: 0; border-radius: 6px; background: var(--primary); color: var(--on-primary);
+  font-size: 17px; font-weight: 500;
+}
+
+/* ---- Pantalla principal ---- */
+#app {
+  height: 100dvh; display: grid; gap: 10px;
+  grid-template-columns: minmax(0, 1fr) clamp(236px, 33vw, 340px);
+  padding: max(8px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right))
+           max(8px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+}
+
+/* La hoja blanca: los dos objetos */
+#objetos {
+  min-height: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 10px 12px;
+  background: var(--sheet); border: 1px solid var(--border); border-radius: 10px;
+}
+.objeto { min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 6px; }
+.objeto h2 { font-size: 16px; font-weight: 600; }
+.objeto h2 span { font-weight: 400; color: var(--muted); }
+.vista { min-height: 0; border-radius: 8px; background: var(--raised); }
+.vista svg { display: block; width: 100%; height: 100%; }
+.pieza, .pieza-canto { transition: fill 220ms var(--ease); }
+.colores { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; }
+
+.muestra {
+  height: 60px; min-width: 0; padding: 0 2px; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 2px; border: 1px solid var(--control); border-radius: 6px;
+  background: var(--sheet); text-align: center; font-size: 13px; font-weight: 500; line-height: 1.2;
+  transition: background 150ms var(--ease);
+}
+.muestra .punto {
+  flex: none; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--color);
+}
+.muestra svg { width: 16px; height: 16px; opacity: 0; transition: opacity 120ms; }
+.muestra[aria-checked="true"] { background: var(--active); border: 2.5px solid var(--text); font-weight: 600; padding: 0 .5px; }
+.muestra[aria-checked="true"] svg { opacity: 1; }
+.muestra:active:not(:disabled) { background: var(--active); }
+.muestra.pendiente { border-color: var(--border); color: var(--muted); background: var(--raised); }
+.muestra.pendiente .punto { background: none; border: 2px dashed var(--color); }
+.bloqueados .muestra:not(.pendiente) { opacity: .55; }
+
+/* El marco: estado y acciones, al alcance del pulgar */
+#mando { min-width: 0; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 8px; padding: 2px 0; }
+#estado { min-height: 0; overflow: hidden; }
+.renglon { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 26px; }
+#chip { display: inline-flex; align-items: center; gap: 7px; font-weight: 600; }
+#chip i { width: 10px; height: 10px; border-radius: 50%; background: var(--dot, var(--neutral)); }
+#completa {
+  flex: none; width: 34px; height: 34px; margin: -4px 0; display: grid; place-items: center;
+  border: 0; border-radius: 6px; background: none; color: var(--muted);
+}
+#completa svg { width: 20px; height: 20px; }
+#paso { color: var(--muted); font-size: 13px; }
+#paso b { font: 500 13px "IBM Plex Mono", monospace; color: var(--text); font-variant-numeric: tabular-nums; }
+#descripcion {
+  font-size: 17px; font-weight: 600; line-height: 1.22; margin-top: 2px; text-wrap: balance;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden;
+}
+#nota {
+  font-size: 13px; color: var(--muted); margin-top: 3px;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden;
+}
+#nota.error { color: var(--negative); font-weight: 500; }
+
+#acciones { display: grid; gap: 8px; }
+.accion {
+  position: relative; overflow: hidden; width: 100%; height: clamp(58px, 20dvh, 78px);
+  border-radius: 8px; font-size: 18px; font-weight: 500; line-height: 1.15;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+}
+#seguir { border: 2px solid var(--primary); background: var(--primary); color: var(--on-primary); touch-action: none; }
+#seguir .relleno {
+  position: absolute; inset: 0; background: var(--accent); transform: scaleX(0); transform-origin: left;
+  transition: transform 160ms var(--ease);
+}
+#seguir.sosteniendo .relleno { transform: scaleX(1); transition: transform 700ms linear; }
+#seguir .textos { position: relative; display: block; }
+#seguir small { display: block; font-size: 12px; font-weight: 400; margin-top: 2px; opacity: .85; }
+#pausa { border: 2px solid var(--negative); background: var(--negative); color: var(--on-primary); font-weight: 600; }
+#pausa:active:not(:disabled) { background: #a51d22; }
+#seguir:disabled, #pausa:disabled { border-color: var(--active); background: var(--active); color: var(--muted); font-weight: 500; }
+
+/* Vertical: lo mismo, apilado. La pausa nunca se oculta. */
+@media (orientation: portrait) {
+  #app { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
+  #entrada { grid-template-columns: minmax(0, 1fr); align-content: center; }
+  #estado { min-height: 92px; }
+}
+@media (max-height: 340px) {
+  .muestra { height: 54px; }
+  .muestra .punto { width: 22px; height: 22px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pieza, .pieza-canto, .muestra, .muestra svg { transition: none; }
+  #seguir .relleno { transition: none; }
+  #seguir.sosteniendo .relleno { transition: transform 700ms steps(4); }
+}
+</style>
+</head>
+<body>
+
+<section id="entrada" hidden>
+  <div>
+    <h1>MODULAR · Kinova Gen3</h1>
+    <p class="aviso">Desde aquí se puede mover el robot real. Ten a la mano el paro de emergencia.</p>
+  </div>
+  <form id="form-pin" autocomplete="off">
+    <label for="pin">PIN que muestra la PC</label>
+    <input id="pin" type="tel" inputmode="numeric" maxlength="6" required>
+    <p id="pin-error" role="alert"></p>
+    <button class="primario">Entrar</button>
+  </form>
+</section>
+
+<main id="app" hidden>
+  <div id="objetos">
+    <section class="objeto" data-llave="placa">
+      <h2>Placa <span></span></h2>
+      <div class="vista">
+        <!-- De frente y con el canto abajo, como en el soporte (color_dialog.py) -->
+        <svg viewBox="-125 -92 250 184" role="img" aria-label="Placa">
+          <rect class="pieza-canto" x="-105" y="-61" width="210" height="136" rx="5"/>
+          <rect class="pieza" x="-105" y="-75" width="210" height="136" rx="5"/>
+          <circle cx="-61" cy="-26" r="21" fill="#f4f6f8"/>
+          <circle cx="61" cy="-26" r="21" fill="#f4f6f8"/>
+        </svg>
+      </div>
+      <div class="colores" role="radiogroup" aria-label="Color de la placa"></div>
+    </section>
+    <section class="objeto" data-llave="perno">
+      <h2>Perno <span></span></h2>
+      <div class="vista">
+        <!-- Desde la camara de la muneca: cabeza hexagonal sobre su soporte -->
+        <svg viewBox="-125 -105 250 210" role="img" aria-label="Perno">
+          <circle r="92" fill="#26292c"/>
+          <polygon class="pieza-canto" points="70,9 35,69.6 -35,69.6 -70,9 -35,-51.6 35,-51.6"/>
+          <polygon class="pieza" points="70,0 35,60.6 -35,60.6 -70,0 -35,-60.6 35,-60.6"/>
+        </svg>
+      </div>
+      <div class="colores" role="radiogroup" aria-label="Color del perno"></div>
+    </section>
+  </div>
+
+  <aside id="mando">
+    <div id="estado" aria-live="polite">
+      <div class="renglon">
+        <span id="chip"><i></i><span id="chip-texto">Conectando…</span></span>
+        <button id="completa" hidden aria-label="Pantalla completa">
+          <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4"/></svg>
+        </button>
+      </div>
+      <p id="paso"></p>
+      <p id="descripcion"></p>
+      <p id="nota"></p>
+    </div>
+    <div id="acciones">
+      <button id="seguir" class="accion" disabled>
+        <span class="relleno"></span>
+        <span class="textos"><span id="seguir-texto">Seguir</span><small id="seguir-ayuda" hidden>Mantén presionado</small></span>
+      </button>
+      <button id="pausa" class="accion" disabled>Pausar</button>
+    </div>
+  </aside>
+</main>
+
+<script>
+"use strict";
+const $ = (s, r = document) => r.querySelector(s);
+const COLOR = {
+  blue: ["#1f5fbf", "#174689"], red: ["#d92d2d", "#a02121"], pink: ["#e0669a", "#a64b72"],
+};
+const SOSTENER_MS = 700;
+const CHIP = {
+  waiting: ["Esperando", "var(--neutral)"], running: ["Ejecutando", "var(--accent)"],
+  paused: ["En pausa", "var(--warning)"], done: ["Terminada", "var(--positive)"],
+  aborted: ["Abortada", "var(--negative)"],
+};
+
+let actual = null;          // ultimo estado de la PC
+let fallos = 0;
+let enviado = null;         // {paso, estado, hasta}: orden mandada, esperando que el estado cambie
+let aviso = null;           // {texto, hasta}: error de la ultima orden
+let coloresEnviando = 0;
+let local = {};             // color elegido aqui, antes de que la PC lo confirme
+
+async function api(ruta, datos) {
+  const ctl = new AbortController();
+  const reloj = setTimeout(() => ctl.abort(), 3000);
+  try {
+    const r = await fetch(ruta, {
+      method: datos ? "POST" : "GET", signal: ctl.signal, cache: "no-store",
+      headers: datos ? { "Content-Type": "application/json" } : undefined,
+      body: datos ? JSON.stringify(datos) : undefined,
+    });
+    const cuerpo = await r.json().catch(() => ({}));
+    return { codigo: r.status, ...cuerpo };
+  } finally { clearTimeout(reloj); }
+}
+
+function mostrarAviso(texto) { aviso = { texto, hasta: Date.now() + 5000 }; pintar(); }
+
+/* ---- PIN ---- */
+$("#form-pin").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  $("#pin-error").textContent = "";
+  try {
+    const r = await api("/api/entrar", { pin: $("#pin").value.trim() });
+    if (r.codigo === 200) { $("#pin").value = ""; ver(true); sondear(); }
+    else { $("#pin-error").textContent = r.error || "No se pudo entrar."; $("#pin").select(); }
+  } catch { $("#pin-error").textContent = "Sin conexión con la PC."; }
+});
+
+function ver(dentro) {
+  $("#entrada").hidden = dentro;
+  $("#app").hidden = !dentro;
+  if (!dentro) $("#pin").focus();
+}
+
+/* ---- Colores ---- */
+function armarColores(opciones) {
+  document.querySelectorAll(".objeto").forEach((obj) => {
+    const caja = $(".colores", obj);
+    if (caja.children.length) return;
+    opciones.forEach((o) => {
+      const b = document.createElement("button");
+      b.className = "muestra" + (o.activo ? "" : " pendiente");
+      b.setAttribute("role", "radio");
+      b.dataset.color = o.id;
+      b.disabled = !o.activo;
+      b.style.setProperty("--color", COLOR[o.id][0]);
+      b.innerHTML = `<span class="punto"><svg viewBox="0 0 16 16" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.4 3.4L13 4.8"/></svg></span>` +
+        `<span>${o.nombre}</span>`;
+      b.setAttribute("aria-label", o.nombre + (o.activo ? "" : ", pendiente"));
+      b.addEventListener("click", () => elegir(obj.dataset.llave, o.id));
+      caja.append(b);
+    });
+  });
+}
+
+async function elegir(llave, color) {
+  if (!actual || !actual.colores_editables) return;
+  const antes = local[llave] || actual.colores[llave];
+  if (antes === color) return;
+  local[llave] = color;
+  if (navigator.vibrate) navigator.vibrate(15);
+  pintar();
+  coloresEnviando++;
+  try {
+    const r = await api("/api/colores", {
+      placa: local.placa || actual.colores.placa, perno: local.perno || actual.colores.perno,
+    });
+    if (r.codigo !== 200) { local[llave] = antes; mostrarAviso(r.error || "No se pudo cambiar el color."); }
+  } catch { local[llave] = antes; mostrarAviso("Sin conexión con la PC: no se cambió el color."); }
+  coloresEnviando--;
+  if (!coloresEnviando) local = {};
+  pintar();
+}
+
+function pintarColores(e) {
+  document.querySelectorAll(".objeto").forEach((obj) => {
+    const llave = obj.dataset.llave;
+    const color = local[llave] || e.colores[llave];
+    const editable = e.colores_editables && fallos < 2;
+    $(".pieza", obj).style.fill = COLOR[color][0];
+    $(".pieza-canto", obj).style.fill = COLOR[color][1];
+    const opcion = e.opciones.find((o) => o.id === color);
+    $("h2 span", obj).textContent = opcion ? "· " + opcion.nombre : "";
+    const caja = $(".colores", obj);
+    caja.classList.toggle("bloqueados", !editable);
+    caja.querySelectorAll(".muestra").forEach((b) => {
+      b.setAttribute("aria-checked", String(b.dataset.color === color));
+      const o = e.opciones.find((x) => x.id === b.dataset.color);
+      b.disabled = !o.activo || !editable;
+    });
+  });
+}
+
+/* ---- Estado ---- */
+function pintar() {
+  const e = actual;
+  if (!e) return;
+  const sinRed = fallos >= 2;
+  if (enviado && (!e.vivo || e.paso !== enviado.paso || e.estado !== enviado.estado)) enviado = null;
+  if (enviado && Date.now() > enviado.hasta) {
+    enviado = null;
+    aviso = { texto: "El controlador no respondió. Revisa la PC.", hasta: Date.now() + 5000 };
+  }
+  if (aviso && Date.now() > aviso.hasta) aviso = null;
+
+  pintarColores(e);
+
+  const [texto, punto] = sinRed ? ["Sin conexión", "var(--negative)"]
+    : !e.vivo ? ["Controlador apagado", "var(--neutral)"]
+    : (CHIP[e.estado] || [e.estado || "Sin estado", "var(--neutral)"]);
+  $("#chip-texto").textContent = texto;
+  $("#chip").style.setProperty("--dot", punto);
+
+  $("#paso").innerHTML = (!sinRed && e.vivo && e.paso)
+    ? `Paso <b>${e.paso}</b> de <b>${e.total}</b> · ${e.automatico ? "Automático" : "Paso a paso"}` : "";
+  $("#descripcion").textContent = sinRed ? "No llegan datos de la PC"
+    : e.vivo ? (e.descripcion || "") : "Arráncalo en la GUI: Sistema";
+
+  const nota = $("#nota");
+  nota.classList.toggle("error", sinRed || Boolean(aviso));
+  nota.textContent = sinRed ? "Aquí no se puede pausar. Usa el paro de emergencia si hace falta."
+    : aviso ? aviso.texto
+    : enviado ? "Enviado, esperando al controlador…"
+    : e.estado === "running" ? "Los colores se cambian con la secuencia detenida."
+    : e.estado === "paused" && /\(operador\)/.test(e.mensaje || "") ? "El brazo se queda donde está. Continuar reanuda este paso."
+    : e.estado === "paused" && e.mensaje ? e.mensaje
+    : e.vision ? "Visión lista."
+    : "Visión apagada: enciéndela en la GUI (Sistema).";
+
+  const seguir = $("#seguir");
+  const puede = !sinRed && !enviado && e.seguir.activo;
+  if (!puede) cancelarSostener();
+  seguir.disabled = !puede;
+  $("#seguir-texto").textContent = enviado ? "Enviado…" : sinRed ? "Sin conexión" : e.seguir.texto;
+  $("#seguir-ayuda").hidden = !puede;
+  $("#pausa").disabled = sinRed || Boolean(enviado) || !e.pausar;
+}
+
+async function sondear() {
+  try {
+    const r = await api("/api/estado");
+    if (r.codigo === 401) { ver(false); return; }
+    if (r.codigo !== 200) throw new Error();
+    fallos = 0;
+    actual = r;
+    armarColores(r.opciones);
+    pintar();
+  } catch {
+    fallos++;
+    pintar();
+    if (!actual && fallos === 1) { ver(false); return; }
+  }
+  setTimeout(sondear, 350);
+}
+
+/* ---- Pausar: basta un toque, y actua al tocar, sin esperar a soltar ---- */
+async function pausar() {
+  const e = actual;
+  if (!e || $("#pausa").disabled) return;
+  enviado = { paso: e.paso, estado: e.estado, hasta: Date.now() + 2000 };
+  if (navigator.vibrate) navigator.vibrate(40);
+  pintar();
+  try {
+    const r = await api("/api/pausa", {});
+    if (r.codigo !== 200) { enviado = null; mostrarAviso(r.error || "No se pudo pausar."); }
+  } catch { enviado = null; mostrarAviso("La pausa no llegó. Usa el paro de emergencia si hace falta."); }
+}
+const botonPausa = $("#pausa");
+botonPausa.addEventListener("pointerdown", (ev) => { ev.preventDefault(); pausar(); });
+botonPausa.addEventListener("click", (ev) => { if (ev.detail === 0) pausar(); });   // teclado
+
+/* ---- Seguir: hay que sostenerlo, para que el robot no arranque con un roce ---- */
+const botonSeguir = $("#seguir");
+let reloj = null;
+
+function empezarSostener() {
+  if (botonSeguir.disabled || reloj) return;
+  botonSeguir.classList.add("sosteniendo");
+  reloj = setTimeout(async () => {
+    reloj = null;
+    botonSeguir.classList.remove("sosteniendo");
+    const e = actual;
+    enviado = { paso: e.paso, estado: e.estado, hasta: Date.now() + 2500 };
+    if (navigator.vibrate) navigator.vibrate(30);
+    pintar();
+    try {
+      const r = await api("/api/seguir", { paso: e.paso, estado: e.estado });
+      if (r.codigo !== 200) { enviado = null; mostrarAviso(r.error || "No se pudo seguir."); }
+    } catch { enviado = null; mostrarAviso("La orden no llegó a la PC."); }
+  }, SOSTENER_MS);
+}
+function cancelarSostener() {
+  if (reloj) { clearTimeout(reloj); reloj = null; }
+  botonSeguir.classList.remove("sosteniendo");
+}
+botonSeguir.addEventListener("pointerdown", (ev) => {
+  botonSeguir.setPointerCapture(ev.pointerId); empezarSostener();
+});
+for (const n of ["pointerup", "pointercancel", "lostpointercapture"]) botonSeguir.addEventListener(n, cancelarSostener);
+botonSeguir.addEventListener("contextmenu", (ev) => ev.preventDefault());
+botonSeguir.addEventListener("keydown", (ev) => {
+  if ((ev.key === " " || ev.key === "Enter") && !ev.repeat) { ev.preventDefault(); empezarSostener(); }
+});
+botonSeguir.addEventListener("keyup", cancelarSostener);
+botonSeguir.addEventListener("blur", cancelarSostener);
+
+/* ---- Pantalla completa y horizontal (si el navegador deja) ---- */
+const completa = $("#completa");
+const raiz = document.documentElement;
+function pintarCompleta() { completa.hidden = !raiz.requestFullscreen || Boolean(document.fullscreenElement); }
+completa.addEventListener("click", async () => {
+  try {
+    await raiz.requestFullscreen();
+    if (screen.orientation && screen.orientation.lock) await screen.orientation.lock("landscape");
+  } catch { /* el navegador no lo permite: se sigue usando igual */ }
+});
+document.addEventListener("fullscreenchange", pintarCompleta);
+pintarCompleta();
+
+/* Que la pantalla no se apague (solo donde el navegador lo permite, en HTTPS) */
+async function pantallaEncendida() {
+  try { if (navigator.wakeLock && !document.hidden) await navigator.wakeLock.request("screen"); } catch { /* no disponible */ }
+}
+document.addEventListener("visibilitychange", pantallaEncendida);
+pantallaEncendida();
+
+/* ---- Arranque ---- */
+(async () => {
+  try {
+    // QR de la PC: la URL trae "#pin=NNNNNN". Se borra de la barra enseguida.
+    const delQr = /(?:^#|&)pin=(\d{6})/.exec(location.hash);
+    if (delQr) {
+      history.replaceState(null, "", location.pathname + location.search);
+      const e = await api("/api/entrar", { pin: delQr[1] });
+      if (e.codigo !== 200) $("#pin-error").textContent = e.error || "El PIN del QR ya no sirve: escribe el de la PC.";
+    }
+    const r = await api("/api/estado");
+    if (r.codigo === 401) { ver(false); return; }
+    ver(true);
+    sondear();
+  } catch { ver(false); $("#pin-error").textContent = "Sin conexión con la PC."; }
+})();
+</script>
+</body>
+</html>
